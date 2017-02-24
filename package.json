@@ -1,0 +1,26 @@
+{
+  "name": "react-native-smart-image-picker",
+  "version": "1.0.0-alpha",
+  "description": "",
+  "main": "ImagePicker.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/react-native-component/react-native-smart-image-picker.git"
+  },
+  "keywords": [
+    "react-native",
+    "smart",
+    "image",
+    "picker",
+    "component"
+  ],
+  "author": "HISAME SHIZUMARU",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/react-native-component/react-native-smart-image-picker/issues"
+  },
+  "homepage": "https://github.com/react-native-component/react-native-smart-image-picker#readme"
+}
