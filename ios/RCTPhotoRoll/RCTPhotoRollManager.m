@@ -9,10 +9,6 @@
 #import "RCTPhotoRollManager.h"
 #import "RCTUIManager.h"
 
-@interface RCTPhotoRollManager () <PHPhotoLibraryChangeObserver>
-@property (strong) PHCachingImageManager *imageManager;
-@end
-
 @implementation RCTPhotoRollManager
 
 RCT_EXPORT_MODULE(RCTPhotoRoll)
@@ -39,26 +35,13 @@ RCT_EXPORT_METHOD(getPhotoCount:(NSDictionary *)options
 
 - (id)init {
     if ((self = [super init])) {
-        PHFetchResult<PHAssetCollection *> *collectionResult = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum subtype:PHAssetCollectionSubtypeAlbumRegular options:nil];
+        PHFetchResult<PHAssetCollection *> *collectionResult = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum subtype:PHAssetCollectionSubtypeSmartAlbumUserLibrary options:nil];
 
-//        for (PHAssetCollection *collection in collectionResult) {
-//            if ([collection.localizedTitle isEqualToString:@"相机胶卷"]) {
-//                self.imageOptions = [[PHImageRequestOptions alloc] init];
-//                self.imageOptions.synchronous = NO;
-//                PHFetchOptions *options = [[PHFetchOptions alloc] init];
-//                options.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
-//                self.assetsFetchResults = [PHAsset fetchAssetsInAssetCollection:collection options:options];
-//                break;
-//            }
-//        }
-        
-        PHAssetCollection *collection = collectionResult[0];
         self.imageOptions = [[PHImageRequestOptions alloc] init];
         self.imageOptions.synchronous = NO;
-        PHFetchOptions *options = [[PHFetchOptions alloc] init];
-        options.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
-        self.assetsFetchResults = [PHAsset fetchAssetsInAssetCollection:collection options:options];
-
+        PHFetchOptions *fetchOptions = [[PHFetchOptions alloc] init];
+        fetchOptions.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:YES],];
+        self.assetsFetchResults = [PHAsset fetchAssetsInAssetCollection:collectionResult.firstObject options:fetchOptions];
     }
     return self;
 }
@@ -67,7 +50,7 @@ RCT_EXPORT_METHOD(getPhotoCount:(NSDictionary *)options
 {
     NSArray *keys = [options allKeys];
     
-    int number = 0;
+    int index = 0;
     CGFloat width = 0;
     CGFloat height = 0;
     CGFloat scale = [UIScreen mainScreen].scale;
@@ -78,13 +61,13 @@ RCT_EXPORT_METHOD(getPhotoCount:(NSDictionary *)options
         height = [[frame objectForKey:@"height"] floatValue];
         view.frame = CGRectMake(view.frame.origin.x, view.frame.origin.y, width, height);
     }
-    if([keys containsObject:@"number"]) {
-        number = [[options objectForKey:@"number"] intValue];
+    if([keys containsObject:@"index"]) {
+        index = [[options objectForKey:@"index"] intValue];
     }
 
     CGSize AssetGridThumbnailSize = CGSizeMake(width * scale, height * scale);
     
-    PHAsset *asset = self.assetsFetchResults[number];
+    PHAsset *asset = self.assetsFetchResults[index];
     [[PHImageManager defaultManager] requestImageForAsset:asset targetSize:AssetGridThumbnailSize contentMode:PHImageContentModeAspectFill options:self.imageOptions resultHandler:^(UIImage * _Nullable result, NSDictionary * _Nullable info) {
         view.image = result;
     }];

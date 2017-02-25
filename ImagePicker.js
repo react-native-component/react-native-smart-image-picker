@@ -15,328 +15,258 @@ import {
     Dimensions,
     ActivityIndicator,
     ListView,
+    Image,
+    TouchableOpacity,
+    Alert,
 } from 'react-native'
 
 import PhotoRoll from './PhotoRoll'
-import TimerEnhance from '../react-native-smart-timer-enhance'
 import PullToRefreshListView from '../react-native-smart-pull-to-refresh-listview'
+import selectedIcon from './selected.png'
+import unSelectedIcon from './unselected.png'
 
-let pageSize = 20
-let itemIndex = 0
-const { height: deviceHeight } = Dimensions.get('window')
+const { width: deviceWidth, height: deviceHeight, } = Dimensions.get('window')
 
-class ImagePicker extends Component {
+export default class ImagePicker extends Component {
+
+    static defaultProps = {
+        columnCount: 4,
+        padding: 1,
+    }
+
+    static propTypes = {
+        columnCount: PropTypes.number,
+        padding: PropTypes.number,
+        style: View.propTypes.style,
+        onSelect: PropTypes.function,
+        renderSelectButton: PropTypes.function,
+    }
 
     // 构造
-    constructor(props) {
-        super(props);
+    constructor (props) {
+        super(props)
 
         this._dataSource = new ListView.DataSource({
             rowHasChanged: (r1, r2) => r1 !== r2,
-            //sectionHeaderHasChanged: (s1, s2) => s1 !== s2,
-        });
+        })
 
         let dataList = []
 
         this.state = {
+            selectedIndexList: [],
             dataList: dataList,
             dataSource: this._dataSource.cloneWithRows(dataList),
         }
+        this._photoCount = 0
         this._rowCount = 0
+        this._itemIndex = 0
+        this._pageSize = 20
+
+        this._photoWidth = this._getPhotoWidth()
+        this._listItemHeight = this._getListItemHeight()
     }
 
     componentWillMount () {
         this._initPhotos()
     }
 
-    async _initPhotos () {
-        let startDate = Date.now()
-        let photoCount = await PhotoRoll.getPhotoCount(null)
-        //console.log(`photoCount / 4 = `, photoCount / 4)
-        this._rowCount = Math.floor(photoCount / 4)
-        itemIndex = 0
-        let startIndex = itemIndex
-        let endIndex = itemIndex + pageSize <= this._rowCount ? itemIndex + pageSize : this._rowCount - itemIndex
-        let refreshedDataList = []
-        for(let i = startIndex; i < endIndex; i++) {
-            refreshedDataList.push(0)
+    render () {
+        console.log(`component render`)
+        return (
+            <PullToRefreshListView
+                ref={ (component) => this._pullToRefreshListView = component }
+                viewType={PullToRefreshListView.constants.viewType.listView}
+                contentContainerStyle={styles.contentContainer}
+                style={[{padding: this.props.padding,}, this.props.style, ]}
+                initialListSize={this._pageSize}
+                enableEmptySections={true}
+                dataSource={this.state.dataSource}
+                pageSize={this._pageSize}
+                renderRow={this._renderRow}
+                showsVerticalScrollIndicator={false}
+                listItemProps={{ style: {overflow: 'hidden', height: this._listItemHeight,}, }}
+                renderFooter={this._renderFooter}
+                onLoadMore={this._onLoadMore}
+                autoLoadMore={true}
+                enabledPullDown={false}
+                onEndReachedThreshold={deviceHeight}
+            />
+        )
+
+    }
+
+    _renderCells (rowIndex) {
+        let { columnCount, padding, } = this.props
+        let width = this._photoWidth
+        let height = this._photoWidth
+        let baseIndex = rowIndex * columnCount
+        let cells = [];
+        for (let i = 0; i < columnCount; i++) {
+            let index = baseIndex + i
+            if (index == this._photoCount) {
+                break;
+            }
+            cells.push(
+                <TouchableOpacity onPress={this._onPressCell}>
+                    <PhotoRoll
+                        style={{width, height, margin: padding,}}
+                        options={{
+                                    frame: { width, height, },
+                                    index,
+                                 }}
+                    />
+                    {this._renderSelectButton(index)}
+                </TouchableOpacity>
+            )
         }
-        itemIndex = endIndex
+        return cells;
+    }
 
-        //need to clear ListRowRefsCache manually
-        this._pullToRefreshListView.clearListRowRefsCache()
+    _renderRow = (rowData, sectionID, rowID) => {
+        console.log(`_renderRow`)
+        return (
+            <View style={{flexDirection: 'row', }}>
+                {this._renderCells(rowID)}
+            </View>    
+        )
+    }
 
+    _renderSelectButton = (cellIndex) => {
+        let { renderSelectButton, } = this.props
+        let { selectedIndexList, } = this.state
+        let selected = selectedIndexList.includes(cellIndex)
+        console.log(`cellIndex = `, cellIndex)
+        if (cellIndex == 0) {
+            console.log(`selectedIndexList = `, selectedIndexList)
+        }
+        let selectButton
+        if (renderSelectButton) {
+            selectButton = renderSelectButton(selected)
+        } else {
+            selectButton = ( <Image style={[styles.selectButton]} source={selected ? selectedIcon : unSelectedIcon}/> )
+        }
+        return (
+            <TouchableOpacity style={[styles.selectButtonContainer, styles.selectButton]} onPress={this._onPressSelectButton.bind(this, cellIndex)}>
+                {selectButton}
+            </TouchableOpacity>
+        )
+    }
+
+    _onPressCell = () => {
+        Alert.alert('_onPressCell')
+    }
+
+    _onPressSelectButton = (cellIndex) => {
+        let selectedIndexList = [...this.state.selectedIndexList]
+        let index = selectedIndexList.indexOf(cellIndex)
+        if (~index) {
+            selectedIndexList.splice(index, 1)
+        } else {
+            selectedIndexList.push(cellIndex)
+        }
+        console.log(`index selectedIndexList`, index, selectedIndexList)
+        this.setState({
+            selectedIndexList,
+            dataSource: this._dataSource.cloneWithRows(this.state.dataList),
+        })
+    }
+
+    _getPhotoWidth () {
+        let { columnCount, padding } = this.props
+        return (deviceWidth - columnCount * (padding + 2) ) / columnCount
+    }
+
+    _getListItemHeight () {
+        let { padding, } = this.props
+        return this._photoWidth + padding * 2
+    }
+
+    _getNewDataList () {
+        let startIndex = this._itemIndex
+        let endIndex = this._itemIndex + this._pageSize <= this._rowCount ? this._itemIndex + this._pageSize : this._rowCount
+        let dataList = []
+        for(let i = startIndex; i < endIndex; i++) {
+            dataList.push(null)
+        }
+        this._itemIndex = endIndex
+        return dataList
+    }
+
+    _renderFooter = (viewState) => {
+        let {pullState, } = viewState
+        let {load_more_none, loading_more, loaded_all, } = PullToRefreshListView.constants.viewState
+        switch (pullState) {
+            case load_more_none:
+            case loading_more:
+                return (
+                    <View
+                        style={styles.footer}>
+                        <ActivityIndicator
+                            animating={true}
+                            size={'small'}/>
+                    </View>
+                )
+            case loaded_all:
+                return null
+        }
+        return null
+    }
+
+    async _initPhotos () {
+        let { columnCount, } = this.props
+        this._photoCount = await PhotoRoll.getPhotoCount(null)
+        this._rowCount = Math.ceil(this._photoCount / columnCount)
+        this._itemIndex = 0
+
+        let refreshedDataList = this._getNewDataList()
         this.setState({
             dataList: refreshedDataList,
             dataSource: this._dataSource.cloneWithRows(refreshedDataList),
         })
     }
 
-    //Using ListView
-    render() {
-        return (
-            <PullToRefreshListView
-                ref={ (component) => this._pullToRefreshListView = component }
-                viewType={PullToRefreshListView.constants.viewType.listView}
-                contentContainerStyle={{backgroundColor: 'transparent', }}
-                style={{marginTop: Platform.OS == 'ios' ? 64 : 56, }}
-                initialListSize={20}
-                enableEmptySections={true}
-                dataSource={this.state.dataSource}
-                pageSize={20}
-                renderRow={this._renderRow}
-                showsVerticalScrollIndicator={false}
-                //renderSeparator={(sectionID, rowID) => <View style={styles.separator} />}
-                //listItemProps={{overflow: 'hidden', height: 150, }}
-                listItemProps={{ style: {overflow: 'hidden', height: 100,}, }}
-                //renderHeader={this._renderHeader}
-                renderFooter={this._renderFooter}
-                //onRefresh={this._onRefresh}
-                onLoadMore={this._onLoadMore}
-                autoLoadMore={true}
-                enabledPullDown={false}
-                //onEndReachedThreshold={deviceHeight}
-            />
-        )
-
-    }
-
-    _renderRow = (rowData, sectionID, rowID) => {
-        return (
-            <View style={{flexDirection: 'row',}}>
-                <PhotoRoll
-                    style={{width: 100, height: 100, borderWidth: 1, borderColor: 'red',}}
-                    options={{
-                                                frame: {
-                                                    width: 100,
-                                                    height: 100
-                                                },
-                                                number: rowID * 4,
-                                             }}
-                />
-                <PhotoRoll
-                    style={{width: 100, height: 100, borderWidth: 1, borderColor: 'red',}}
-                    options={{
-                                                frame: {
-                                                    width: 100,
-                                                    height: 100
-                                                },
-                                                number: rowID * 4 + 1,
-                                             }}
-                />
-                <PhotoRoll
-                    style={{width: 100, height: 100, borderWidth: 1, borderColor: 'red',}}
-                    options={{
-                                                frame: {
-                                                    width: 100,
-                                                    height: 100
-                                                },
-                                                number: rowID * 4 + 2,
-                                             }}
-                />
-                <PhotoRoll
-                    style={{width: 100, height: 100, borderWidth: 1, borderColor: 'red',}}
-                    options={{
-                                                frame: {
-                                                    width: 100,
-                                                    height: 100
-                                                },
-                                                number: rowID * 4 + 3,
-                                             }}
-                />
-                <Text style={{paddingHorizontal: 30, paddingVertical: 20}} >{rowID}</Text>
-            </View>
-        )
-    }
-
-    //_renderHeader = (viewState) => {
-    //    let {pullState, pullDistancePercent} = viewState
-    //    let {refresh_none, refresh_idle, will_refresh, refreshing,} = PullToRefreshListView.constants.viewState
-    //    pullDistancePercent = Math.round(pullDistancePercent * 100)
-    //    switch(pullState) {
-    //        case refresh_none:
-    //            return (
-    //                <View style={{height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent',}}>
-    //                    <Text>pull down to refresh</Text>
-    //                </View>
-    //            )
-    //        case refresh_idle:
-    //            return (
-    //                <View style={{height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent',}}>
-    //                    <Text>pull down to refresh {pullDistancePercent}%</Text>
-    //                </View>
-    //            )
-    //        case will_refresh:
-    //            return (
-    //                <View style={{height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent',}}>
-    //                    <Text>release to refresh {pullDistancePercent > 100 ? 100 : pullDistancePercent}%</Text>
-    //                </View>
-    //            )
-    //        case refreshing:
-    //            return (
-    //                <View style={{flexDirection: 'row', height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent',}}>
-    //                    {this._renderActivityIndicator()}<Text>refreshing</Text>
-    //                </View>
-    //            )
-    //    }
-    //}
-
-    _renderFooter = (viewState) => {
-        let {pullState, pullDistancePercent} = viewState
-        let {load_more_none, load_more_idle, will_load_more, loading_more, loaded_all, } = PullToRefreshListView.constants.viewState
-        pullDistancePercent = Math.round(pullDistancePercent * 100)
-        switch(pullState) {
-            case load_more_none:
-            case loading_more:
-                return (
-                    <View style={{flexDirection: 'row', height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent',}}>
-                        {this._renderActivityIndicator()}
-                    </View>
-                )
-            case loaded_all:
-                return (
-                    <View style={{height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent',}}>
-                        <Text>no more</Text>
-                    </View>
-                )
-        }
-        return null
-    }
-
-    _onRefresh = () => {
-        //console.log('outside _onRefresh start...')
-
-        //console.log(`this._pullToRefreshListView._listItemRefs`)
-        //console.log(this._pullToRefreshListView._listItemRefs.length)
-        //console.log(Object.keys(this._pullToRefreshListView._listItemRefs).length)
-
-        //simulate request data
-        this.setTimeout( () => {
-            itemIndex = 0
-            let startIndex = itemIndex
-            let endIndex = itemIndex + pageSize <= this._rowCount ? itemIndex + pageSize : this._rowCount - itemIndex
-            let refreshedDataList = []
-            for(let i = startIndex; i < endIndex; i++) {
-                refreshedDataList.push(0)
-            }
-            itemIndex = endIndex
-
-            //need to clear ListRowRefsCache manually
-            this._pullToRefreshListView.clearListRowRefsCache()
-
-            this.setState({
-                dataList: refreshedDataList,
-                dataSource: this._dataSource.cloneWithRows(refreshedDataList),
-            })
-            this._pullToRefreshListView.endRefresh(true)
-
-        }, 1)
-    }
-
     _onLoadMore = () => {
-        //console.log('outside _onLoadMore start...')
-
-        //simulate request data
-        this.setTimeout( () => {
-
-            let startIndex = itemIndex
-            let endIndex = itemIndex + pageSize <= this._rowCount ? itemIndex + pageSize : this._rowCount
-            let addedDataList = []
-            for(let i = startIndex; i < endIndex; i++) {
-                addedDataList.push(0)
+        let addedDataList = this._getNewDataList()
+        let newDataList = this.state.dataList.concat(addedDataList)
+        this.setState({
+            dataList: newDataList,
+            dataSource: this._dataSource.cloneWithRows(newDataList),
+        }, () => {
+            let loadedAll
+            if (this.state.dataList.length == this._rowCount) {
+                loadedAll = true
+                this._pullToRefreshListView.endLoadMore(loadedAll)
             }
-            itemIndex = endIndex
-
-            console.log(`_onLoadMore = itemIndex = `, itemIndex)
-
-            let newDataList = this.state.dataList.concat(addedDataList)
-            this.setState({
-                dataList: newDataList,
-                dataSource: this._dataSource.cloneWithRows(newDataList),
-            }, () => {
-                let loadedAll
-                if(this.state.dataList.length >= this._rowCount) {
-                    loadedAll = true
-                    this._pullToRefreshListView.endLoadMore(loadedAll)
-                }
-                else {
-                    loadedAll = false
-                    this._pullToRefreshListView.endLoadMore(loadedAll)
-                }
-            })
-        }, 1)
+            else {
+                loadedAll = false
+                this._pullToRefreshListView.endLoadMore(loadedAll)
+            }
+        })
     }
-
-    _renderActivityIndicator() {
-        return ActivityIndicator ? (
-            <ActivityIndicator
-                style={{marginRight: 10,}}
-                animating={true}
-                //color={'#ff0000'}
-                size={'small'}/>
-        ) : Platform.OS == 'android' ?
-            (
-                <ProgressBarAndroid
-                    style={{marginRight: 10,}}
-                    //color={'#ff0000'}
-                    styleAttr={'Small'}/>
-
-            ) :  (
-            <ActivityIndicatorIOS
-                style={{marginRight: 10,}}
-                animating={true}
-                //color={'#ff0000'}
-                size={'small'}/>
-        )
-    }
-
 }
 
-
-
 const styles = StyleSheet.create({
-    itemHeader: {
-        height: 35,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#ccc',
-        backgroundColor: 'blue',
-        overflow: 'hidden',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    item: {
-        height: 60,
-        //borderBottomWidth: StyleSheet.hairlineWidth,
-        //borderBottomColor: '#ccc',
-        overflow: 'hidden',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-
     contentContainer: {
-        paddingTop: 20 + 44,
+        backgroundColor: 'transparent',
     },
 
-    separator: {
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#ccc',
+    selectButtonContainer: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
     },
 
-    thumbnail: {
-        padding: 6,
+    selectButton: {
+        width: 30,
+        height: 30,
+    },
+
+    footer: {
         flexDirection: 'row',
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: '#ccc',
-        overflow: 'hidden',
-    },
-
-    textContainer: {
-        //height: 100,
-        padding: 20,
-        flex: 1,
+        height: 35,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'transparent',
     }
 })
 
-export default TimerEnhance(ImagePicker)
