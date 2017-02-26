@@ -15,31 +15,30 @@ import {
     Dimensions,
     ActivityIndicator,
     ListView,
-    Image,
     TouchableOpacity,
-    Alert,
+    Platform,
 } from 'react-native'
 
 import PhotoRoll from './PhotoRoll'
 import PullToRefreshListView from '../react-native-smart-pull-to-refresh-listview'
-import selectedIcon from './selected.png'
-import unSelectedIcon from './unselected.png'
+import SelectIcon from './SelectIcon'
 
 const { width: deviceWidth, height: deviceHeight, } = Dimensions.get('window')
 
 export default class ImagePicker extends Component {
 
     static defaultProps = {
+        autoRecycle: true,
         columnCount: 4,
         padding: 1,
     }
 
     static propTypes = {
+        autoRecycle: PropTypes.bool,
         columnCount: PropTypes.number,
         padding: PropTypes.number,
         style: View.propTypes.style,
         onSelect: PropTypes.function,
-        renderSelectButton: PropTypes.function,
     }
 
     // 构造
@@ -53,17 +52,16 @@ export default class ImagePicker extends Component {
         let dataList = []
 
         this.state = {
-            selectedIndexList: [],
             dataList: dataList,
             dataSource: this._dataSource.cloneWithRows(dataList),
         }
         this._photoCount = 0
         this._rowCount = 0
         this._itemIndex = 0
-        this._pageSize = 20
-
+        this._cells = []
         this._photoWidth = this._getPhotoWidth()
         this._listItemHeight = this._getListItemHeight()
+        this._pageSize = this._getPageSize()
     }
 
     componentWillMount () {
@@ -71,7 +69,6 @@ export default class ImagePicker extends Component {
     }
 
     render () {
-        console.log(`component render`)
         return (
             <PullToRefreshListView
                 ref={ (component) => this._pullToRefreshListView = component }
@@ -84,12 +81,13 @@ export default class ImagePicker extends Component {
                 pageSize={this._pageSize}
                 renderRow={this._renderRow}
                 showsVerticalScrollIndicator={false}
-                listItemProps={{ style: {overflow: 'hidden', height: this._listItemHeight,}, }}
+                listItemProps={this.props.autoRecycle ? { style: {overflow: 'hidden', height: this._listItemHeight,}, } : null}
                 renderFooter={this._renderFooter}
                 onLoadMore={this._onLoadMore}
                 autoLoadMore={true}
                 enabledPullDown={false}
-                onEndReachedThreshold={deviceHeight}
+                //onEndReachedThreshold={deviceHeight - (Platform.OS == 'ios' ? 64 : 56)}
+                //onEndReachedThreshold={Platform.OS == 'ios' ? 64 : 56}
             />
         )
 
@@ -123,52 +121,38 @@ export default class ImagePicker extends Component {
     }
 
     _renderRow = (rowData, sectionID, rowID) => {
-        console.log(`_renderRow`)
         return (
-            <View style={{flexDirection: 'row', }}>
+            <View style={{flexDirection: 'row', overflow: 'hidden'}}>
                 {this._renderCells(rowID)}
-            </View>    
+            </View>
         )
     }
 
     _renderSelectButton = (cellIndex) => {
-        let { renderSelectButton, } = this.props
-        let { selectedIndexList, } = this.state
-        let selected = selectedIndexList.includes(cellIndex)
-        console.log(`cellIndex = `, cellIndex)
-        if (cellIndex == 0) {
-            console.log(`selectedIndexList = `, selectedIndexList)
+        if (this._cells[ cellIndex ] == null) {
+            this._cells[ cellIndex ] = {
+                selected: false
+            }
         }
-        let selectButton
-        if (renderSelectButton) {
-            selectButton = renderSelectButton(selected)
-        } else {
-            selectButton = ( <Image style={[styles.selectButton]} source={selected ? selectedIcon : unSelectedIcon}/> )
-        }
+        let selected = this._cells[ cellIndex ].selected
         return (
-            <TouchableOpacity style={[styles.selectButtonContainer, styles.selectButton]} onPress={this._onPressSelectButton.bind(this, cellIndex)}>
-                {selectButton}
+            <TouchableOpacity style={[styles.selectButtonContainer, styles.selectButton]}
+                              onPress={this._onPressSelectButton.bind(this, cellIndex)}>
+                <SelectIcon ref={ component => { this._cells[cellIndex].selectIcon = component} }
+                            selected={this._cells[cellIndex].selected}/>
             </TouchableOpacity>
         )
     }
 
     _onPressCell = () => {
-        Alert.alert('_onPressCell')
+
     }
 
     _onPressSelectButton = (cellIndex) => {
-        let selectedIndexList = [...this.state.selectedIndexList]
-        let index = selectedIndexList.indexOf(cellIndex)
-        if (~index) {
-            selectedIndexList.splice(index, 1)
-        } else {
-            selectedIndexList.push(cellIndex)
-        }
-        console.log(`index selectedIndexList`, index, selectedIndexList)
-        this.setState({
-            selectedIndexList,
-            dataSource: this._dataSource.cloneWithRows(this.state.dataList),
-        })
+        let cell = this._cells[ cellIndex ]
+        cell.selected = !cell.selected
+        let { selectIcon, selected } = cell
+        selectIcon.toggleSelected()
     }
 
     _getPhotoWidth () {
@@ -176,16 +160,20 @@ export default class ImagePicker extends Component {
         return (deviceWidth - columnCount * (padding + 2) ) / columnCount
     }
 
+    _getPageSize () {
+        return Math.ceil(deviceHeight / this._getListItemHeight())
+    }
+
     _getListItemHeight () {
         let { padding, } = this.props
         return this._photoWidth + padding * 2
     }
 
-    _getNewDataList () {
+    _getRowDataList () {
         let startIndex = this._itemIndex
         let endIndex = this._itemIndex + this._pageSize <= this._rowCount ? this._itemIndex + this._pageSize : this._rowCount
         let dataList = []
-        for(let i = startIndex; i < endIndex; i++) {
+        for (let i = startIndex; i < endIndex; i++) {
             dataList.push(null)
         }
         this._itemIndex = endIndex
@@ -218,7 +206,7 @@ export default class ImagePicker extends Component {
         this._rowCount = Math.ceil(this._photoCount / columnCount)
         this._itemIndex = 0
 
-        let refreshedDataList = this._getNewDataList()
+        let refreshedDataList = this._getRowDataList()
         this.setState({
             dataList: refreshedDataList,
             dataSource: this._dataSource.cloneWithRows(refreshedDataList),
@@ -226,7 +214,7 @@ export default class ImagePicker extends Component {
     }
 
     _onLoadMore = () => {
-        let addedDataList = this._getNewDataList()
+        let addedDataList = this._getRowDataList()
         let newDataList = this.state.dataList.concat(addedDataList)
         this.setState({
             dataList: newDataList,
@@ -254,11 +242,6 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         right: 0,
-    },
-
-    selectButton: {
-        width: 30,
-        height: 30,
     },
 
     footer: {

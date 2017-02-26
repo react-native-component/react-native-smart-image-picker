@@ -11,9 +11,10 @@
 
 @interface RCTPhotoRollManager : RCTViewManager
 
+@property (strong) PHFetchResult *collectionResult;
 @property (strong) PHFetchResult *assetsFetchResults;
+@property (strong) PHFetchOptions *fetchOptions;
 @property (strong) PHImageRequestOptions *imageOptions;
-@property (strong) PHAssetCollection *assetCollection;
-@property (strong) PHAsset *asset;
+@property (strong) PHCachingImageManager *imageManager;
 
 @end

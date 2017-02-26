@@ -16,6 +16,8 @@ export default class PhotoRoll extends Component {
 
     static getPhotoCount = PhotoRollManager.getPhotoCount
 
+    static refresh = PhotoRollManager.refresh
+
     static defaultProps = {
         number: 0,
     }
