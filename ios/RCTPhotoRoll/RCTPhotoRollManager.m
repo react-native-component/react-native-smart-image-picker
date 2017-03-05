@@ -53,9 +53,49 @@ RCT_EXPORT_METHOD(refresh:(NSDictionary *)options
         height = [[frame objectForKey:@"height"] floatValue];
     }
     
-    CGSize AssetGridThumbnailSize = CGSizeMake(width * scale, height * scale);
+    self.AssetGridThumbnailSize = CGSizeMake(width * scale, height * scale);
     
-    [self loadImages:AssetGridThumbnailSize];
+    [self initImageManager];
+    resolve(@[[NSNull null]]);
+}
+
+
+
+#pragma mark - Asset Caching
+
+RCT_EXPORT_METHOD(resetCachedAssets)
+{
+    [self.imageManager stopCachingImagesForAllAssets];
+}
+
+RCT_EXPORT_METHOD(updateCachedAssets:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    NSArray *keys = [options allKeys];
+    
+    // Compute the assets to start caching and to stop caching.
+    NSMutableArray *addedIndexPaths;
+    NSMutableArray *removedIndexPaths;
+    
+    if([keys containsObject:@"addedIndexPaths"]) {
+        addedIndexPaths = [options objectForKey:@"addedIndexPaths"];
+     }
+    if([keys containsObject:@"removedIndexPaths"]) {
+        removedIndexPaths = [options objectForKey:@"removedIndexPaths"];
+    }
+        
+    NSArray *assetsToStartCaching = [self assetsAtIndexPaths:addedIndexPaths];
+    NSArray *assetsToStopCaching = [self assetsAtIndexPaths:removedIndexPaths];
+        
+    [self.imageManager startCachingImagesForAssets:assetsToStartCaching
+                                            targetSize:self.AssetGridThumbnailSize
+                                           contentMode:PHImageContentModeAspectFill
+                                               options:nil];
+    [self.imageManager stopCachingImagesForAssets:assetsToStopCaching
+                                           targetSize:self.AssetGridThumbnailSize
+                                          contentMode:PHImageContentModeAspectFill
+                                              options:nil];
     resolve(@[[NSNull null]]);
 }
 
@@ -66,7 +106,7 @@ RCT_EXPORT_METHOD(refresh:(NSDictionary *)options
         self.collectionResult = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum subtype:PHAssetCollectionSubtypeSmartAlbumUserLibrary options:nil];
         self.imageOptions = [[PHImageRequestOptions alloc] init];
         self.imageOptions.synchronous = NO;
-        self.imageOptions.deliveryMode = PHImageRequestOptionsDeliveryModeFastFormat;
+        self.imageOptions.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
         
         self.fetchOptions = [[PHFetchOptions alloc] init];
         self.fetchOptions.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO],];
@@ -75,23 +115,40 @@ RCT_EXPORT_METHOD(refresh:(NSDictionary *)options
     return self;
 }
 
-- (void)loadImages:(CGSize)AssetGridThumbnailSize
+- (void)initImageManager
 {
     [self.imageManager stopCachingImagesForAllAssets];
     self.assetsFetchResults = [PHAsset fetchAssetsInAssetCollection:self.collectionResult.firstObject options:self.fetchOptions];
-    NSMutableArray *assets = [[NSMutableArray alloc] init];
-    [self.assetsFetchResults enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        if ([obj isKindOfClass:[PHAsset class]]) {
-            [assets addObject:obj];
-        }
-    }];
+//    NSMutableArray *assets = [[NSMutableArray alloc] init];
+//    [self.assetsFetchResults enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+//        if ([obj isKindOfClass:[PHAsset class]]) {
+//            [assets addObject:obj];
+//        }
+//    }];
     self.imageManager = [[PHCachingImageManager alloc] init];
-    [self.imageManager startCachingImagesForAssets:assets
-                                   targetSize:AssetGridThumbnailSize
-                                  contentMode:PHImageContentModeAspectFit
-                                      options:self.imageOptions];
+//    [self.imageManager startCachingImagesForAssets:assets
+//                                   targetSize:AssetGridThumbnailSize
+//                                  contentMode:PHImageContentModeAspectFit
+//                                      options:self.imageOptions];
 }
 
+
+- (NSArray *)assetsAtIndexPaths:(NSArray *)indexPaths
+{
+    int count = indexPaths.count;
+    if (count == 0) { return nil; }
+    
+    NSMutableArray *assets = [NSMutableArray arrayWithCapacity:count];
+    for( int i = 0; i < count; i++){
+        int index = [[indexPaths objectAtIndex:i] intValue];
+        if (index < 0) {
+            continue;
+        }
+        PHAsset *asset = self.assetsFetchResults[index];
+        [assets addObject:asset];
+    }
+    return assets;
+}
 
 
 -(void)setPhotoViewOptions:(UIImageView *)view :(nonnull NSDictionary *)options

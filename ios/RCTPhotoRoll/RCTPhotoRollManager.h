@@ -16,5 +16,6 @@
 @property (strong) PHFetchOptions *fetchOptions;
 @property (strong) PHImageRequestOptions *imageOptions;
 @property (strong) PHCachingImageManager *imageManager;
+@property CGSize AssetGridThumbnailSize;
 
 @end

@@ -21,6 +21,7 @@ import {
 
 import PhotoRoll from './PhotoRoll'
 import PullToRefreshListView from '../react-native-smart-pull-to-refresh-listview'
+//import LoadingSpinnerOverlay from '../react-native-smart-loading-spinner-overlay'
 import SelectIcon from './SelectIcon'
 
 const { width: deviceWidth, height: deviceHeight, } = Dimensions.get('window')
@@ -28,9 +29,10 @@ const { width: deviceWidth, height: deviceHeight, } = Dimensions.get('window')
 export default class ImagePicker extends Component {
 
     static defaultProps = {
-        autoRecycle: true,
+        autoRecycle: false,
         columnCount: 4,
         padding: 1,
+        dataList: []
     }
 
     static propTypes = {
@@ -39,6 +41,13 @@ export default class ImagePicker extends Component {
         padding: PropTypes.number,
         style: View.propTypes.style,
         onSelect: PropTypes.function,
+
+        photoWidth: PropTypes.number,
+        pageSize: PropTypes.number,
+        photoCount: PropTypes.number,
+        rowCount: PropTypes.number,
+        itemIndex: PropTypes.number,
+        dataList: PropTypes.array,
     }
 
     // 构造
@@ -49,24 +58,41 @@ export default class ImagePicker extends Component {
             rowHasChanged: (r1, r2) => r1 !== r2,
         })
 
-        let dataList = []
+        //let dataList = []
+        let dataList = props.dataList
 
         this.state = {
             dataList: dataList,
             dataSource: this._dataSource.cloneWithRows(dataList),
         }
-        this._photoCount = 0
-        this._rowCount = 0
-        this._itemIndex = 0
+        //this._photoCount = 0
+        this._photoCount = props.photoCount
+        //this._rowCount = 0
+        this._rowCount = props.rowCount
+        //this._itemIndex = 0
+        this._itemIndex = props.itemIndex
         this._cells = []
-        this._photoWidth = this._getPhotoWidth()
-        this._listItemHeight = this._getListItemHeight()
-        this._pageSize = this._getPageSize()
+        //this._photoWidth = this._getPhotoWidth()
+        this._photoWidth = props.photoWidth
+
+        //console.log(`props.photoWidth = ${props.photoWidth}`)
+
+        this._listItemHeight = this._getListItemHeight(this._photoWidth)
+        //this._pageSize = this._getPageSize(this._photoWidth)
+        this._pageSize = props.pageSize
+
+        this._lastMinIndex = undefined
+        this._lastMaxIndex = undefined
     }
 
-    componentWillMount () {
-        this._initPhotos()
-    }
+    //componentWillMount () {
+    //    this._initPhotos()
+    //}
+
+    //componentDidMount () {
+    //    //this._modalLoadingSpinnerOverLay.show()
+    //    this._refreshPhotoRoll()
+    //}
 
     render () {
         return (
@@ -86,11 +112,92 @@ export default class ImagePicker extends Component {
                 onLoadMore={this._onLoadMore}
                 autoLoadMore={true}
                 enabledPullDown={false}
-                //onEndReachedThreshold={deviceHeight - (Platform.OS == 'ios' ? 64 : 56)}
+                onChangeVisibleRows={this._onChangeVisibleRows}
+                onEndReachedThreshold={deviceHeight - (Platform.OS == 'ios' ? 64 : 56)}
                 //onEndReachedThreshold={Platform.OS == 'ios' ? 64 : 56}
             />
         )
 
+    }
+
+    componentWillUnmount () {
+        PhotoRoll.resetCachedAssets()
+    }
+
+    _onChangeVisibleRows = async (visibleRows, changedRows) => {
+        //console.log(`visibleRows, changedRows = `, visibleRows, changedRows)
+        let addedIndexPaths = []
+        let removedIndexPaths = []
+        let rowObj = visibleRows.s1
+        let rowKeys = Object.keys(rowObj)
+        let len = rowKeys.length
+        let currentMinIndex, currentMaxIndex
+        if (len > 0) {
+            //console.log(`len = ${len}, rowKeys[ 0 ] = ${rowKeys[ 0 ]}, rowKeys[ len - 1 ] = ${rowKeys[ len - 1 ]}`)
+            currentMinIndex = parseInt(rowKeys[ 0 ], 10)
+            currentMaxIndex = parseInt(rowKeys[ len - 1 ], 10)
+            //console.log(`currentMinIndex = ${currentMinIndex}, currentMaxIndex = ${currentMaxIndex}, this._pageSize = ${this._pageSize}`)
+        }
+        if (this._lastMinIndex == undefined && this._lastMaxIndex == undefined) {
+            //console.log(`currentMaxIndex + this._pageSize = ${currentMaxIndex + this._pageSize}`)
+            for (let i = currentMinIndex; i <= currentMaxIndex + this._pageSize; i++) {
+                addedIndexPaths.push(i)
+            }
+        }
+        else {
+            //console.log(`this._lastMaxIndex = ${this._lastMaxIndex}, this._lastMinIndex = ${this._lastMinIndex}`)
+            let startIndex, endIndex;
+            if (this._lastMaxIndex < currentMaxIndex) {
+                startIndex = this._lastMaxIndex + 1 + this._pageSize
+                endIndex = currentMaxIndex + this._pageSize
+                //console.log(`add -> startIndex = ${startIndex}, endIndex = ${endIndex}`)
+                if (endIndex <= this._photoCount) {
+                    for (let i = startIndex; i <= endIndex; i++) {
+                        addedIndexPaths.push(i)
+                    }
+                }
+            }
+            else if (currentMaxIndex < this._lastMaxIndex) {
+                startIndex = currentMaxIndex + 1 + this._pageSize
+                endIndex = this._lastMaxIndex + this._pageSize
+                //console.log(`remove else -> startIndex = ${startIndex}, endIndex = ${endIndex}`)
+                if (endIndex <= this._photoCount) {
+                    for (let i = startIndex; i <= endIndex; i++) {
+                        removedIndexPaths.push(i)
+                    }
+                }
+            }
+
+            if (this._lastMinIndex < currentMinIndex) {
+                startIndex = this._lastMinIndex - this._pageSize
+                endIndex = currentMinIndex - this._pageSize
+                //console.log(`remove -> startIndex = ${startIndex}, endIndex = ${endIndex}`)
+                if (startIndex >= 0) {
+                    for (let i = startIndex; i < endIndex; i++) {
+                        removedIndexPaths.push(i)
+                    }
+                }
+            }
+            else if (currentMinIndex < this._lastMinIndex) {
+                startIndex = currentMinIndex - this._pageSize
+                endIndex = this._lastMinIndex - this._pageSize
+                //console.log(`add else -> startIndex = ${startIndex}, endIndex = ${endIndex}`)
+                if (startIndex >= 0) {
+                    for (let i = startIndex; i < endIndex; i++) {
+                        addedIndexPaths.push(i)
+                    }
+                }
+            }
+        }
+        //console.log(`addedIndexPaths, removedIndexPaths = `, addedIndexPaths, removedIndexPaths)
+
+        this._lastMinIndex = currentMinIndex
+        this._lastMaxIndex = currentMaxIndex
+
+        await PhotoRoll.updateCachedAssets({
+            addedIndexPaths,
+            removedIndexPaths
+        })
     }
 
     _renderCells (rowIndex) {
@@ -160,13 +267,13 @@ export default class ImagePicker extends Component {
         return (deviceWidth - columnCount * (padding + 2) ) / columnCount
     }
 
-    _getPageSize () {
-        return Math.ceil(deviceHeight / this._getListItemHeight())
+    _getPageSize (photoWidth) {
+        return Math.ceil(deviceHeight / this._getListItemHeight(photoWidth))
     }
 
-    _getListItemHeight () {
+    _getListItemHeight (photoWidth) {
         let { padding, } = this.props
-        return this._photoWidth + padding * 2
+        return photoWidth + padding * 2
     }
 
     _getRowDataList () {
@@ -200,19 +307,6 @@ export default class ImagePicker extends Component {
         return null
     }
 
-    async _initPhotos () {
-        let { columnCount, } = this.props
-        this._photoCount = await PhotoRoll.getPhotoCount(null)
-        this._rowCount = Math.ceil(this._photoCount / columnCount)
-        this._itemIndex = 0
-
-        let refreshedDataList = this._getRowDataList()
-        this.setState({
-            dataList: refreshedDataList,
-            dataSource: this._dataSource.cloneWithRows(refreshedDataList),
-        })
-    }
-
     _onLoadMore = () => {
         let addedDataList = this._getRowDataList()
         let newDataList = this.state.dataList.concat(addedDataList)
@@ -231,6 +325,44 @@ export default class ImagePicker extends Component {
             }
         })
     }
+
+    async _initPhotos () {
+        let { columnCount, } = this.props
+        console.log(`_initPhotos columnCount = ${columnCount}`)
+        this._photoCount = await PhotoRoll.getPhotoCount(null)
+        this._rowCount = Math.ceil(this._photoCount / columnCount)
+        this._itemIndex = 0
+
+        let addedIndexPaths = []
+        let removedIndexPaths = []
+
+        let len = Math.min(this._pageSize * 2, this._photoCount)
+        for (let i = 0; i < len; i++) {
+            addedIndexPaths.push(i)
+        }
+
+        await PhotoRoll.updateCachedAssets({
+            addedIndexPaths,
+            removedIndexPaths
+        })
+
+        let refreshedDataList = this._getRowDataList()
+        this.setState({
+            dataList: refreshedDataList,
+            dataSource: this._dataSource.cloneWithRows(refreshedDataList),
+        })
+    }
+
+    //async _refreshPhotoRoll () {
+    //    let { columnCount, padding } = this.props
+    //    let width = (deviceWidth - columnCount * (padding + 2) ) / columnCount
+    //    let height = width
+    //    await PhotoRoll.refresh({
+    //        frame: { width, height, },
+    //    })
+    //    await this._initPhotos()
+    //    //this._modalLoadingSpinnerOverLay.hide()
+    //}
 }
 
 const styles = StyleSheet.create({

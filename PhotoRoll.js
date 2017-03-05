@@ -18,6 +18,10 @@ export default class PhotoRoll extends Component {
 
     static refresh = PhotoRollManager.refresh
 
+    static updateCachedAssets = PhotoRollManager.updateCachedAssets
+
+    static resetCachedAssets = PhotoRollManager.resetCachedAssets
+
     static defaultProps = {
         number: 0,
     }
